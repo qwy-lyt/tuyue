@@ -82,6 +82,9 @@
 
       <button id="new-chat" class="btn-new">＋ 新对话</button>
 
+      <div class="side-title">我的文件<span id="file-count" class="side-count"></span></div>
+      <nav id="file-library" class="file-library"></nav>
+
       <div class="side-title">历史记录</div>
       <nav id="conversation-list" class="conversation-list"></nav>
 
@@ -93,7 +96,6 @@
         <h1 id="chat-title">新对话</h1>
         <span id="oda-badge" class="badge hidden"></span>
         <div class="header-actions">
-          <button id="open-panel" class="btn-ghost btn-small">数据</button>
           <button id="open-admin" class="btn-ghost btn-small hidden">管理</button>
           <button id="open-settings" class="btn-ghost btn-small">设置</button>
           <span id="current-user" class="current-user"></span>
@@ -135,7 +137,11 @@
     <aside id="data-panel" class="data-panel hidden">
       <header class="panel-header">
         <strong id="panel-title">识别结果</strong>
-        <button id="panel-close" class="btn-icon" title="关闭面板">✕</button>
+        <div class="panel-header-actions">
+          <button id="panel-reload" class="btn-tiny-ghost hidden"
+                  title="重新读取一次（会再调用一次模型）">重新提取</button>
+          <button id="panel-close" class="btn-icon" title="关闭面板">✕</button>
+        </div>
       </header>
 
       <div class="panel-preview">

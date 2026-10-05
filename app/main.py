@@ -365,6 +365,12 @@ async def upload(
     return asdict(record)
 
 
+@app.get("/api/files")
+def list_files(user: accounts.User = Depends(current_user)) -> list[dict]:
+    """The account's file library: everything uploaded, newest first."""
+    return [store.file_summary(record) for record in store.list_file_records(user.id)]
+
+
 @app.get("/api/files/{file_id}")
 def file_record(file_id: str, user: accounts.User = Depends(current_user)) -> dict:
     record = store.load_file_record(user.id, file_id)
@@ -405,12 +411,12 @@ def conversation(conversation_id: str, user: accounts.User = Depends(current_use
     found = store.load_conversation(user.id, conversation_id)
     if found is None:
         raise HTTPException(404, "对话不存在")
+    # The extracted table is keyed on the files, not the conversation, so the
+    # caller fetches it separately once it knows which files were discussed.
     return {
         "id": found.id,
         "title": found.title,
         "messages": [asdict(m) for m in found.messages],
-        # Reopening a conversation should bring its data panel back too.
-        "extraction": store.load_extraction(user.id, found.id) or {},
     }
 
 
@@ -421,14 +427,27 @@ def remove_conversation(
     check_origin(request)
     if not store.delete_conversation(user.id, conversation_id):
         raise HTTPException(404, "对话不存在")
-    # The extracted table belongs to the conversation; do not leave it orphaned.
-    store.delete_extraction(user.id, conversation_id)
+    # Extracted data is deliberately left alone: it describes the files, which
+    # are still in the library.
     return {"ok": True}
 
 
 class ExtractRequest(BaseModel):
     file_ids: list[str] = Field(default_factory=list)
-    conversation_id: str | None = None
+
+
+@app.get("/api/extract")
+def cached_extraction(
+    file_ids: str = "", user: accounts.User = Depends(current_user)
+) -> dict:
+    """The stored result for this file set, if one was ever produced.
+
+    Lets the panel reopen without spending another model call: the data is keyed
+    on the files, so it is found again whether it was pulled up from a chat or
+    straight from the file library.
+    """
+    ids = [item for item in file_ids.split(",") if item]
+    return store.load_extraction(user.id, ids) or {}
 
 
 @app.post("/api/extract")
@@ -438,8 +457,8 @@ async def extract(
     """Pull a file set's contents out as structured rows for the side panel.
 
     Runs in a worker thread: it is a plain blocking call to the model, and it
-    can take a while on a dense drawing. The result is stored against the
-    conversation so a page refresh does not throw it away.
+    can take a while on a dense drawing. The result is stored against the file
+    set so a page refresh, or simply closing the panel, does not throw it away.
     """
     check_origin(request)
     if not payload.file_ids:
@@ -456,15 +475,8 @@ async def extract(
         raise HTTPException(500, f"调用模型失败：{exc}") from exc
 
     result = {"items": items, "notices": notices, "file_ids": payload.file_ids}
-    if payload.conversation_id:
-        store.save_extraction(user.id, payload.conversation_id, result)
+    store.save_extraction(user.id, payload.file_ids, result)
     return result
-
-
-@app.get("/api/extract/latest")
-def latest_extraction(user: accounts.User = Depends(current_user)) -> dict:
-    """What the data panel should show right after a reload."""
-    return store.latest_extraction(user.id) or {}
 
 
 def _sse(event: dict) -> str:

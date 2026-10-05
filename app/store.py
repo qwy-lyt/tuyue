@@ -9,6 +9,7 @@ a strict pattern, so it cannot escape its directory.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -184,6 +185,46 @@ def load_file_records(user_id: str, file_ids: list[str]) -> list[FileRecord]:
     return records
 
 
+def list_file_records(user_id: str) -> list[FileRecord]:
+    """Every file this account has ever uploaded, newest first.
+
+    Backs the file library: uploads are kept rather than consumed by the next
+    message, so the listing has to survive restarts and page reloads.
+    """
+    root = cache_root(user_id)
+    if not root.is_dir():
+        return []
+
+    records: list[FileRecord] = []
+    for entry in root.iterdir():
+        if not entry.is_dir():
+            continue
+        record = load_file_record(user_id, entry.name)
+        if record is not None:
+            records.append(record)
+    return sorted(records, key=lambda item: item.uploaded_at, reverse=True)
+
+
+def file_summary(record: FileRecord) -> dict:
+    """A listing row: no extracted text, just enough to draw the entry."""
+    first_image = ""
+    for path in record.image_paths:
+        if path.is_file():
+            first_image = f"/api/files/{record.file_id}/images/0"
+            break
+
+    return {
+        "file_id": record.file_id,
+        "filename": record.filename,
+        "kind": record.kind,
+        "uploaded_at": record.uploaded_at,
+        "has_text": bool(record.text.strip()),
+        "image_count": len(record.images),
+        "thumbnail": first_image,
+        "warnings": record.warnings,
+    }
+
+
 # --------------------------------------------------------------------------
 # conversations
 # --------------------------------------------------------------------------
@@ -307,21 +348,31 @@ def extractions_dir(user_id: str) -> Path:
     return user_dir(user_id) / "extractions"
 
 
-def save_extraction(user_id: str, conversation_id: str, payload: dict) -> None:
-    """Keep one extraction per conversation, so a refresh does not lose it."""
+def extraction_key(file_ids: list[str]) -> str:
+    """A filename-safe id for one set of files.
+
+    Keyed on the files rather than the conversation: the extracted data
+    describes the drawings, and it should still be there whether it was pulled
+    up from a chat or straight from the file library.
+    """
+    joined = ",".join(sorted(file_ids))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:24]
+
+
+def save_extraction(user_id: str, file_ids: list[str], payload: dict) -> None:
+    """Keep one extraction per file set, so a refresh does not lose it."""
     directory = extractions_dir(user_id)
     directory.mkdir(parents=True, exist_ok=True)
-    payload = {**payload, "conversation_id": conversation_id, "saved_at": time.time()}
-    (directory / f"{_checked(conversation_id)}.json").write_text(
+    payload = {**payload, "file_ids": sorted(file_ids), "saved_at": time.time()}
+    (directory / f"{extraction_key(file_ids)}.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
 
-def load_extraction(user_id: str, conversation_id: str) -> dict | None:
-    try:
-        path = extractions_dir(user_id) / f"{_checked(conversation_id)}.json"
-    except InvalidId:
+def load_extraction(user_id: str, file_ids: list[str]) -> dict | None:
+    if not file_ids:
         return None
+    path = extractions_dir(user_id) / f"{extraction_key(file_ids)}.json"
     if not path.is_file():
         return None
     try:
@@ -330,31 +381,7 @@ def load_extraction(user_id: str, conversation_id: str) -> dict | None:
         return None
 
 
-def latest_extraction(user_id: str) -> dict | None:
-    """The most recently saved extraction, whatever conversation it came from.
-
-    Used on page load: the browser cannot know which conversation was open, but
-    the data panel should still have something to show.
-    """
-    directory = extractions_dir(user_id)
-    if not directory.is_dir():
-        return None
-    candidates = sorted(
-        (path for path in directory.glob("*.json")),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    for path in candidates:
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-    return None
-
-
-def delete_extraction(user_id: str, conversation_id: str) -> None:
-    try:
-        path = extractions_dir(user_id) / f"{_checked(conversation_id)}.json"
-    except InvalidId:
+def delete_extraction(user_id: str, file_ids: list[str]) -> None:
+    if not file_ids:
         return
-    path.unlink(missing_ok=True)
+    (extractions_dir(user_id) / f"{extraction_key(file_ids)}.json").unlink(missing_ok=True)

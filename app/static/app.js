@@ -4,11 +4,111 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   conversationId: null,
-  pendingFiles: [],   // FileRecords returned by /api/upload, awaiting send
+  library: [],        // every file this account has uploaded, newest first
+  selectedIds: [],    // which of them go with the next message
   streaming: false,
   appName: "图阅",     // replaced by /api/status on load
   avatarText: "图",
 };
+
+/* ------------------------------------------------------------------ */
+/* file library                                                        */
+/* ------------------------------------------------------------------ */
+
+function libraryEntry(fileId) {
+  return state.library.find((item) => item.file_id === fileId) || null;
+}
+
+async function loadFileLibrary() {
+  try {
+    state.library = await api("/api/files");
+  } catch {
+    state.library = [];
+  }
+
+  // Drop selections for files that no longer exist.
+  state.selectedIds = state.selectedIds.filter((id) => libraryEntry(id));
+
+  renderFileLibrary();
+  renderSelection();
+}
+
+function renderFileLibrary() {
+  const box = $("file-library");
+  box.replaceChildren();
+  $("file-count").textContent = state.library.length ? `（${state.library.length}）` : "";
+
+  if (!state.library.length) {
+    const empty = document.createElement("div");
+    empty.className = "library-empty";
+    empty.textContent = "还没有文件。上传后会出现在这里，想聊哪个点哪个。";
+    box.append(empty);
+    return;
+  }
+
+  for (const item of state.library) {
+    const selected = state.selectedIds.includes(item.file_id);
+    const row = document.createElement("div");
+    row.className = "library-item" + (selected ? " selected" : "");
+    row.title = selected ? "点击取消选择" : "点击选中，然后用它提问";
+
+    const thumb = document.createElement("div");
+    thumb.className = "library-thumb";
+    if (item.thumbnail) {
+      const img = document.createElement("img");
+      img.src = item.thumbnail;
+      img.alt = "";
+      thumb.append(img);
+    } else {
+      thumb.textContent = "📄";
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "library-meta";
+    const name = document.createElement("div");
+    name.className = "library-name";
+    name.textContent = item.filename;
+    const sub = document.createElement("div");
+    sub.className = "library-sub";
+    const bits = [];
+    if (item.image_count) bits.push(`${item.image_count} 张图`);
+    bits.push(item.has_text ? "含文字" : "无文字层");
+    sub.textContent = bits.join(" · ");
+    meta.append(name, sub);
+
+    // The extract action lives here, next to the file it applies to.
+    const extract = document.createElement("button");
+    extract.type = "button";
+    extract.className = "library-action";
+    extract.textContent = "数据";
+    extract.title = "读取这份文件的数据";
+    extract.onclick = (event) => {
+      event.stopPropagation();
+      extractFor([item.file_id]);
+    };
+
+    row.append(thumb, meta, extract);
+    row.onclick = () => toggleFileSelection(item.file_id);
+    box.append(row);
+  }
+}
+
+function toggleFileSelection(fileId) {
+  const index = state.selectedIds.indexOf(fileId);
+  if (index === -1) {
+    state.selectedIds.push(fileId);
+  } else {
+    state.selectedIds.splice(index, 1);
+  }
+  renderFileLibrary();
+  renderSelection();
+}
+
+function clearSelection() {
+  state.selectedIds = [];
+  renderFileLibrary();
+  renderSelection();
+}
 
 /* ------------------------------------------------------------------ */
 /* markdown (small, safe subset)                                       */
@@ -333,8 +433,6 @@ async function openConversation(id) {
   const data = await api(`/api/conversations/${id}`);
   state.conversationId = id;
   rememberLastConversation(id);
-  state.pendingFiles = [];
-  $("attachments").innerHTML = "";
   $("chat-title").textContent = data.title;
   $("messages").innerHTML = "";
   state.fileCache = {};
@@ -351,27 +449,45 @@ async function openConversation(id) {
     appendMessage(message.role, message.content, message.file_ids);
   }
 
-  // Bring back the data table this conversation produced, if it had one.
-  if (data.extraction?.items?.length) {
-    applyExtraction(data.extraction, { open: false });
-  } else {
-    panel.items = [];
-    panel.fileIds = [];
-    setPanelVisible(false);
-  }
+  // Re-select the files this conversation was about, so a follow-up question
+  // still carries them.
+  state.selectedIds = allIds.filter((fileId) => libraryEntry(fileId));
+  renderFileLibrary();
+  renderSelection();
+
+  // Bring back the data table for those files, if one was ever extracted. This
+  // reads the stored copy -- no model call.
+  await restoreExtractionFor(allIds);
 
   loadConversations();
 }
 
+/** Show the stored extraction for these files, if there is one. */
+async function restoreExtractionFor(fileIds) {
+  panel.items = [];
+  panel.fileIds = [];
+  if (!fileIds.length) {
+    setPanelVisible(false);
+    return;
+  }
+  try {
+    const cached = await api(`/api/extract?file_ids=${encodeURIComponent(fileIds.join(","))}`);
+    if (cached?.items?.length) {
+      applyExtraction(cached, { open: false });
+      return;
+    }
+  } catch { /* nothing stored for this set */ }
+  setPanelVisible(false);
+}
+
 function startNewChat() {
   state.conversationId = null;
-  state.pendingFiles = [];
   state.fileCache = {};
   forgetLastConversation();
   setPanelVisible(false);
   panel.items = [];
   panel.fileIds = [];
-  $("attachments").innerHTML = "";
+  clearSelection();
   $("chat-title").textContent = "新对话";
   // Same markup as the initial page, so a new chat does not look different
   // from a freshly loaded one.
@@ -389,59 +505,83 @@ function startNewChat() {
 /* uploads                                                             */
 /* ------------------------------------------------------------------ */
 
-function renderPendingAttachments() {
+/** Chips above the composer: the files chosen for the next message. */
+function renderSelection() {
   const box = $("attachments");
-  box.innerHTML = "";
-  for (const record of state.pendingFiles) {
+  box.replaceChildren();
+
+  const chosen = state.selectedIds.map(libraryEntry).filter(Boolean);
+  if (!chosen.length) return;
+
+  for (const item of chosen) {
     const chip = document.createElement("div");
     chip.className = "file-chip";
-    const summary = record.text
-      ? `${record.text.length} 字`
-      : (record.images.length ? `${record.images.length} 张图` : "无内容");
-    chip.innerHTML = `<span>📎</span><span>${escapeHtml(record.filename)}</span>` +
-                     `<span style="color:var(--muted)">${summary}</span>`;
 
-    const del = document.createElement("span");
-    del.className = "del";
-    del.textContent = "×";
-    del.style.cursor = "pointer";
-    del.onclick = () => {
-      state.pendingFiles = state.pendingFiles.filter((r) => r.file_id !== record.file_id);
-      renderPendingAttachments();
-    };
-    chip.append(del);
+    if (item.thumbnail) {
+      const thumb = document.createElement("img");
+      thumb.src = item.thumbnail;
+      thumb.alt = "";
+      chip.append(thumb);
+    } else {
+      const icon = document.createElement("span");
+      icon.textContent = "📄";
+      chip.append(icon);
+    }
+
+    const label = document.createElement("span");
+    label.textContent = item.filename;
+    chip.append(label);
+
+    // Extraction sits with the file, not in a toolbar far away from it.
+    const extract = document.createElement("button");
+    extract.type = "button";
+    extract.className = "chip-action";
+    extract.textContent = "提取数据";
+    extract.title = "让模型读出这份文件里的数据";
+    extract.onclick = () => extractFor([item.file_id]);
+    chip.append(extract);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "chip-remove";
+    remove.textContent = "×";
+    remove.title = "取消选择";
+    remove.onclick = () => toggleFileSelection(item.file_id);
+    chip.append(remove);
+
     box.append(chip);
   }
 }
 
+/** Upload into the library. Nothing is attached to a message until you pick it. */
 async function uploadFiles(fileList) {
   const files = Array.from(fileList);
   if (!files.length) return;
 
   for (const file of files) {
-    const chip = document.createElement("div");
-    chip.className = "file-chip";
-    chip.textContent = `⏳ 正在解析 ${file.name}…`;
-    $("attachments").append(chip);
+    const status = document.createElement("div");
+    status.className = "file-chip";
+    status.textContent = `⏳ 正在解析 ${file.name}…`;
+    $("attachments").append(status);
 
     try {
       const form = new FormData();
       form.append("file", file);
       const record = await api("/api/upload", { method: "POST", body: form });
       (state.fileCache ||= {})[record.file_id] = record;
-      state.pendingFiles.push(record);
+
+      status.textContent = `✓ ${file.name} 已存入文件库`;
+      status.classList.add("chip-ok");
+      setTimeout(() => status.remove(), 4000);
     } catch (error) {
-      const failed = document.createElement("div");
-      failed.className = "file-chip";
-      failed.style.borderColor = "var(--danger)";
-      failed.textContent = `✕ ${file.name}：${error.message}`;
-      $("attachments").append(failed);
-      setTimeout(() => failed.remove(), 6000);
-    } finally {
-      chip.remove();
+      status.classList.remove("chip-ok");
+      status.style.borderColor = "var(--danger)";
+      status.textContent = `✕ ${file.name}：${error.message}`;
+      setTimeout(() => status.remove(), 8000);
     }
   }
-  renderPendingAttachments();
+
+  await loadFileLibrary();
 }
 
 /* ------------------------------------------------------------------ */
@@ -453,23 +593,24 @@ async function send() {
 
   const input = $("input");
   const text = input.value.trim();
-  if (!text && !state.pendingFiles.length) return;
-
-  if (!state.pendingFiles.length && !state.conversationId && !text) return;
+  if (!text && !state.selectedIds.length) return;
 
   if (!state.conversationId && !text) {
     alert("请先输入一个问题");
     return;
   }
 
-  const fileIds = state.pendingFiles.map((r) => r.file_id);
-  const warnings = state.pendingFiles.flatMap((r) => r.warnings || []);
+  const fileIds = [...state.selectedIds];
+  const warnings = fileIds
+    .map(libraryEntry)
+    .filter(Boolean)
+    .flatMap((item) => item.warnings || []);
 
   appendMessage("user", text, fileIds, warnings);
   input.value = "";
   input.style.height = "auto";
-  state.pendingFiles = [];
-  $("attachments").innerHTML = "";
+  // The selection is kept on purpose: a follow-up question is about the same
+  // files, and the model has no memory of them between calls.
   setStreaming(true);
 
   const answerNode = appendMessage("assistant", "", []);
@@ -537,11 +678,9 @@ async function send() {
     if (!hadError && !accumulated) answerText.textContent = "（模型没有返回内容）";
     loadConversations();
 
-    // Once the reading is done, pull the same drawings into the side panel as
-    // rows. Skipped on error -- no point spending a second call on a failed turn.
-    if (!hadError && fileIds.length) {
-      extractFor(fileIds, state.conversationId);
-    }
+    // Extraction is deliberately NOT triggered here. It is a second model call
+    // over the same images, and the data is only useful when someone asks for
+    // it -- the button next to the file is where that happens.
   } catch (error) {
     answerText.classList.remove("cursor");
     answerText.innerHTML = `<span style="color:var(--danger)">请求失败：${escapeHtml(error.message)}</span>`;
@@ -573,12 +712,8 @@ $("new-chat").onclick = startNewChat;
 // constants that are declared further down, and `const` is not hoisted.
 
 $("panel-close").onclick = () => setPanelVisible(false);
-$("open-panel").onclick = () => {
-  if (!panel.items.length && !panel.fileIds.length) {
-    alert("还没有识别结果。上传图纸并提问后，数据会自动出现在这里。");
-    return;
-  }
-  setPanelVisible(true);
+$("panel-reload").onclick = () => {
+  if (panel.fileIds.length) extractFor([...panel.fileIds], { force: true });
 };
 $("panel-filter").addEventListener("input", (event) => {
   panel.filter = event.target.value;
@@ -898,9 +1033,32 @@ function applyExtraction(data, { open = true } = {}) {
   if (open) setPanelVisible(true);
   showPanelImage(panel.fileIds);
   renderPanel();
+  updateReloadButton();
 }
 
-async function extractFor(fileIds, conversationId) {
+/* Offered whenever the table is about known files -- a cached read wants a
+   re-read as much as a fresh one does, and a failed read wants a retry. */
+function updateReloadButton() {
+  $("panel-reload").classList.toggle("hidden", !panel.fileIds.length);
+}
+
+async function cachedExtraction(fileIds) {
+  try {
+    const query = encodeURIComponent(fileIds.join(","));
+    return await api(`/api/extract?file_ids=${query}`);
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Show the data for these files.
+ *
+ * Checks the stored copy first: the same drawings rarely need reading twice,
+ * and a second read costs another model call over the same images. Pass
+ * `force` to read them again anyway.
+ */
+async function extractFor(fileIds, { force = false } = {}) {
   if (panel.busy || !fileIds.length) return;
   panel.busy = true;
   panel.fileIds = fileIds;
@@ -909,18 +1067,25 @@ async function extractFor(fileIds, conversationId) {
   $("panel-filter").value = "";
   $("panel-tbody").replaceChildren();
   $("panel-notices").classList.add("hidden");
-  $("panel-count").textContent = "正在识别…";
+  $("panel-reload").classList.add("hidden");
+  $("panel-count").textContent = "正在读取…";
   setPanelVisible(true);
 
   showPanelImage(fileIds);
 
   try {
+    if (!force) {
+      const cached = await cachedExtraction(fileIds);
+      if (cached?.items?.length) {
+        applyExtraction(cached);
+        return;
+      }
+    }
+
     const data = await api("/api/extract", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // The conversation id is what lets the server keep this, so a refresh can
-      // bring the table back.
-      body: JSON.stringify({ file_ids: fileIds, conversation_id: conversationId || null }),
+      body: JSON.stringify({ file_ids: fileIds }),
     });
     applyExtraction({ ...data, file_ids: fileIds });
   } catch (error) {
@@ -928,6 +1093,7 @@ async function extractFor(fileIds, conversationId) {
     const box = $("panel-notices");
     box.textContent = `提取失败：${error.message}`;
     box.classList.remove("hidden");
+    updateReloadButton();
   } finally {
     panel.busy = false;
   }
@@ -937,6 +1103,7 @@ async function extractFor(fileIds, conversationId) {
    because every endpoint below now requires an authenticated account. */
 function startApp() {
   loadStatus();
+  loadFileLibrary();
   loadConversations();
   fillEmptyHints();
   restoreSession();
@@ -956,12 +1123,9 @@ async function restoreSession() {
     }
   }
 
-  // No conversation to reopen, but the last extraction is still worth loading so
-  // the 「数据」 button has something behind it.
-  try {
-    const latest = await api("/api/extract/latest");
-    if (latest?.items?.length) applyExtraction(latest, { open: false });
-  } catch { /* nothing saved yet */ }
+  // No conversation to reopen. Nothing is selected on purpose: which drawings
+  // to talk about is the user's call, and a pre-ticked file would decide it
+  // for them.
 }
 
 // Last line of the file on purpose: the resizer reads module constants, and
