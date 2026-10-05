@@ -1,0 +1,14 @@
+# 统一换行符，避免 Windows 和 Linux/macOS 协作者之间产生整文件级别的差异。
+* text=auto eol=lf
+
+# Windows 批处理必须是 CRLF，否则某些情况下会解析异常。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 图片等二进制文件不要做任何转换。
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.dwg binary
+*.pdf binary
+*.zip binary

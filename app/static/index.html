@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图阅</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ------------------------------------------------------------------ -->
+<!-- login gate                                                          -->
+<!-- ------------------------------------------------------------------ -->
+<div id="auth-screen" class="auth-screen hidden">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span id="auth-mark" class="brand-mark">图</span>
+      <div>
+        <strong id="auth-name">图阅</strong>
+        <small>工程文档与图纸助手</small>
+      </div>
+    </div>
+
+    <div id="auth-error" class="auth-error hidden"></div>
+    <div id="auth-notice" class="auth-notice hidden"></div>
+
+    <form id="login-form" autocomplete="on">
+      <label class="field">
+        <span>用户名</span>
+        <input id="login-username" name="username" autocomplete="username" required>
+      </label>
+      <label class="field">
+        <span>密码</span>
+        <input id="login-password" name="password" type="password"
+               autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="btn-primary btn-block" id="login-submit">登录</button>
+    </form>
+
+    <form id="register-form" class="hidden" autocomplete="off">
+      <label class="field">
+        <span>用户名</span>
+        <input id="register-username" autocomplete="off" required>
+      </label>
+      <label class="field">
+        <span>密码<span class="hint">至少 10 位</span></span>
+        <input id="register-password" type="password" autocomplete="new-password" required>
+      </label>
+      <label class="field">
+        <span>确认密码</span>
+        <input id="register-password2" type="password" autocomplete="new-password" required>
+      </label>
+      <label class="field">
+        <span>邀请码</span>
+        <input id="register-invite" autocomplete="off" required>
+      </label>
+      <button type="submit" class="btn-primary btn-block">注册</button>
+    </form>
+
+    <div class="auth-switch">
+      <a href="#" id="to-register">没有账号？用邀请码注册</a>
+      <a href="#" id="to-login" class="hidden">← 返回登录</a>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------------ -->
+<!-- the app itself                                                      -->
+<!-- ------------------------------------------------------------------ -->
+<div id="app" class="hidden">
+  <div id="setup-banner" class="banner hidden"></div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span id="brand-mark" class="brand-mark">图</span>
+        <div>
+          <strong id="brand-name">图阅</strong>
+          <small id="model-label">加载中…</small>
+        </div>
+      </div>
+
+      <button id="new-chat" class="btn-new">＋ 新对话</button>
+
+      <div class="side-title">历史记录</div>
+      <nav id="conversation-list" class="conversation-list"></nav>
+
+      <div id="status-box" class="status-box"></div>
+    </aside>
+
+    <main class="main">
+      <header class="main-header">
+        <h1 id="chat-title">新对话</h1>
+        <span id="oda-badge" class="badge hidden"></span>
+        <div class="header-actions">
+          <button id="open-panel" class="btn-ghost btn-small">数据</button>
+          <button id="open-admin" class="btn-ghost btn-small hidden">管理</button>
+          <button id="open-settings" class="btn-ghost btn-small">设置</button>
+          <span id="current-user" class="current-user"></span>
+          <button id="logout" class="btn-ghost btn-small">退出</button>
+        </div>
+      </header>
+
+      <section id="messages" class="messages">
+        <div class="empty-state">
+          <h2>上传 PDF 或 DWG，然后开始提问</h2>
+          <p>支持 PDF 文档、DWG/DXF 图纸，也会渲染成图片让模型直接看图。</p>
+          <!-- Filled by app.js: the wording rotates, and the chips are clickable. -->
+          <div class="empty-hints" id="empty-hints"></div>
+        </div>
+      </section>
+
+      <footer class="composer">
+        <div id="attachments" class="attachments"></div>
+        <div id="drop-zone" class="drop-zone">
+          <textarea id="input" rows="1" placeholder="输入问题，或把 PDF / DWG 文件拖到这里…"></textarea>
+          <div class="composer-actions">
+            <label class="btn-icon" title="上传文件">
+              📎
+              <input id="file-input" type="file" multiple
+                     accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.webp,.txt,.md,.csv" hidden>
+            </label>
+            <button id="send" class="btn-send" title="发送">发送</button>
+          </div>
+        </div>
+        <div class="composer-hint">Enter 发送 · Shift+Enter 换行</div>
+      </footer>
+    </main>
+
+    <!-- drag to resize the panel; double-click resets it to half -->
+    <div id="panel-resizer" class="panel-resizer hidden"
+         title="拖动调整宽度 · 双击复位"></div>
+
+    <!-- right-hand panel: the rendered drawing above, extracted rows below -->
+    <aside id="data-panel" class="data-panel hidden">
+      <header class="panel-header">
+        <strong id="panel-title">识别结果</strong>
+        <button id="panel-close" class="btn-icon" title="关闭面板">✕</button>
+      </header>
+
+      <div class="panel-preview">
+        <img id="panel-image" alt="图纸渲染图">
+        <div id="panel-files" class="panel-files"></div>
+      </div>
+
+      <div class="panel-tools">
+        <input id="panel-filter" class="panel-filter" placeholder="筛选，如 尺寸 / 镀镍 / 40">
+        <span id="panel-count" class="panel-count"></span>
+      </div>
+
+      <div id="panel-notices" class="panel-notices hidden"></div>
+
+      <div class="panel-table-wrap">
+        <table class="panel-table">
+          <thead>
+            <tr>
+              <th data-sort="category">类别</th>
+              <th data-sort="name">项目</th>
+              <th data-sort="value" class="numeric">数值</th>
+              <th data-sort="unit">单位</th>
+              <th data-sort="detail">原始标注</th>
+              <th data-sort="note">备注</th>
+              <th data-sort="source">来源</th>
+            </tr>
+          </thead>
+          <tbody id="panel-tbody"></tbody>
+        </table>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------------ -->
+<!-- per-user settings                                                   -->
+<!-- ------------------------------------------------------------------ -->
+<div id="settings-overlay" class="overlay hidden">
+  <div class="dialog dialog-wide" role="dialog" aria-modal="true">
+    <h3>我的设置</h3>
+
+    <label class="field">
+      <span>我的 API Key<span class="hint" id="settings-key-state"></span></span>
+      <input id="settings-key" type="password" autocomplete="off"
+             placeholder="留空表示不修改已保存的 Key">
+    </label>
+
+    <label class="field">
+      <span>服务商</span>
+      <select id="settings-provider"></select>
+    </label>
+
+    <p id="settings-provider-note" class="fine-print"></p>
+
+    <label class="field" id="settings-model-field">
+      <span>模型</span>
+      <select id="settings-model-select"></select>
+    </label>
+
+    <div id="settings-custom-fields" class="hidden">
+      <label class="field">
+        <span>接口地址</span>
+        <input id="settings-base-url" autocomplete="off" placeholder="https://example.com/v1">
+      </label>
+      <label class="field">
+        <span>模型名</span>
+        <input id="settings-model" autocomplete="off" placeholder="模型 id">
+      </label>
+    </div>
+
+    <p id="settings-vision-warning" class="auth-error hidden"></p>
+    <p id="settings-key-link" class="fine-print"></p>
+
+    <p class="fine-print">
+      你的 Key 会加密后存在服务器上。服务端为了调用模型必须能解密它，所以这防的是备份泄露，
+      防不了拿到整台机器的人。建议使用设置了消费上限的 Key。
+    </p>
+
+    <div id="settings-error" class="auth-error hidden"></div>
+    <div id="settings-ok" class="auth-notice hidden"></div>
+
+    <div class="dialog-actions">
+      <button id="settings-verify" class="btn-ghost">测试连通</button>
+      <button id="settings-cancel" class="btn-ghost">关闭</button>
+      <button id="settings-save" class="btn-primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------------ -->
+<!-- admin console                                                       -->
+<!-- ------------------------------------------------------------------ -->
+<div id="admin-overlay" class="overlay hidden">
+  <div class="dialog dialog-xwide" role="dialog" aria-modal="true">
+    <h3>管理后台</h3>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="users">用户</button>
+      <button class="tab" data-tab="invites">邀请码</button>
+      <button class="tab" data-tab="audit">审计日志</button>
+    </div>
+
+    <div id="admin-users" class="tab-panel">
+      <div class="admin-toolbar">
+        <input id="new-user-name" placeholder="新用户名">
+        <input id="new-user-pass" type="password" placeholder="初始密码（至少 10 位）">
+        <label class="checkbox"><input id="new-user-admin" type="checkbox"> 管理员</label>
+        <button id="create-user" class="btn-primary btn-small">创建</button>
+      </div>
+      <div id="admin-users-table" class="table-wrap"></div>
+    </div>
+
+    <div id="admin-invites" class="tab-panel hidden">
+      <div class="admin-toolbar">
+        <input id="new-invite-note" placeholder="备注（给谁用）">
+        <input id="new-invite-uses" type="number" value="1" min="1" title="可用次数">
+        <label class="checkbox"><input id="new-invite-unlimited" type="checkbox"> 不限次数</label>
+        <input id="new-invite-days" type="number" placeholder="有效天数" min="1" title="留空则永久">
+        <button id="create-invite" class="btn-primary btn-small">生成邀请码</button>
+      </div>
+      <div id="admin-invites-table" class="table-wrap"></div>
+    </div>
+
+    <div id="admin-audit" class="tab-panel hidden">
+      <div class="admin-toolbar">
+        <button id="refresh-audit" class="btn-ghost btn-small">刷新</button>
+      </div>
+      <div id="admin-audit-table" class="table-wrap"></div>
+    </div>
+
+    <div id="admin-error" class="auth-error hidden"></div>
+
+    <div class="dialog-actions">
+      <button id="admin-close" class="btn-ghost">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirm-overlay" class="overlay hidden">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <h3 id="confirm-title">删除对话</h3>
+    <p id="confirm-text"></p>
+    <div class="dialog-actions">
+      <button id="confirm-cancel" class="btn-ghost">取消</button>
+      <button id="confirm-ok" class="btn-danger">删除</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script src="/static/auth.js"></script>
+<script src="/static/admin.js"></script>
+</body>
+</html>
