@@ -652,6 +652,45 @@ body.tight-header .main-header h1 { max-width: 92px; overflow: hidden; text-over
   background: var(--accent-soft);
 }
 
+/* ---------- progress ---------- */
+
+/* Shown while something takes long enough that a person would otherwise be
+   staring at a screen that looks stuck. */
+.progress { padding: 0 2px 8px; }
+.progress-track {
+  height: 4px;
+  border-radius: 99px;
+  background: var(--line);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 99px;
+  background-color: var(--accent);
+  /* A highlight travelling across the filled part: the extraction bar parks at
+     95% on purpose, and this keeps it reading as "working", not "stuck". */
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, .45) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 70px 100%;
+  animation: progressSweep 1.3s linear infinite;
+  transition: width .25s ease;
+}
+@keyframes progressSweep {
+  from { background-position: -70px 0; }
+  to { background-position: calc(100% + 70px) 0; }
+}
+.progress-text {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+
 /* ---------- composer chips ---------- */
 
 .chip-action {

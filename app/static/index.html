@@ -113,6 +113,10 @@
       </section>
 
       <footer class="composer">
+        <div id="upload-progress" class="progress hidden">
+          <div class="progress-track"><div id="upload-progress-fill" class="progress-fill"></div></div>
+          <div id="upload-progress-text" class="progress-text"></div>
+        </div>
         <div id="attachments" class="attachments"></div>
         <div id="drop-zone" class="drop-zone">
           <textarea id="input" rows="1" placeholder="输入问题，或把 PDF / DWG 文件拖到这里…"></textarea>
@@ -143,6 +147,12 @@
           <button id="panel-close" class="btn-icon" title="关闭面板">✕</button>
         </div>
       </header>
+
+      <!-- Reads take tens of seconds and report nothing meanwhile; see app.js -->
+      <div id="panel-progress" class="progress hidden">
+        <div class="progress-track"><div id="panel-progress-fill" class="progress-fill"></div></div>
+        <div id="panel-progress-text" class="progress-text"></div>
+      </div>
 
       <div class="panel-preview">
         <img id="panel-image" alt="图纸渲染图">

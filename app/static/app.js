@@ -609,16 +609,40 @@ function renderSelection() {
   }
 }
 
+/* The finished bar lingers for a moment; this keeps a second upload started in
+   that window from having its bar yanked away by the first one's timer. */
+let uploadHideTimer = null;
+
 /** Upload into the library. Nothing is attached to a message until you pick it. */
 async function uploadFiles(fileList) {
   const files = Array.from(fileList);
   if (!files.length) return;
 
-  for (const file of files) {
+  const startedAt = Date.now();
+  const bar = $("upload-progress");
+  const fill = $("upload-progress-fill");
+  const caption = $("upload-progress-text");
+  clearTimeout(uploadHideTimer);
+  bar.classList.remove("hidden");
+  let failed = 0;
+
+  const show = (done, name) => {
+    // The files go one at a time, so how many are finished is a real number.
+    // How far into the current one we are is not knowable, so the bar holds at
+    // the finished count with the highlight moving rather than sitting at 0.
+    const percent = files.length > 1 ? (done / files.length) * 100 : 4;
+    fill.style.width = `${Math.max(4, percent)}%`;
+    caption.textContent = files.length > 1
+      ? `正在解析第 ${Math.min(done + 1, files.length)}/${files.length} 份：${name}`
+      : `正在解析：${name}`;
+  };
+
+  for (const [index, file] of files.entries()) {
     const status = document.createElement("div");
     status.className = "file-chip";
     status.textContent = `⏳ 正在解析 ${file.name}…`;
     $("attachments").append(status);
+    show(index, file.name);
 
     try {
       const form = new FormData();
@@ -630,12 +654,20 @@ async function uploadFiles(fileList) {
       status.classList.add("chip-ok");
       setTimeout(() => status.remove(), 4000);
     } catch (error) {
+      failed += 1;
       status.classList.remove("chip-ok");
       status.style.borderColor = "var(--danger)";
       status.textContent = `✕ ${file.name}：${error.message}`;
       setTimeout(() => status.remove(), 8000);
     }
   }
+
+  const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+  fill.style.width = "100%";
+  caption.textContent = failed
+    ? `解析结束，其中 ${failed} 份没成功 · 用时 ${seconds} 秒`
+    : `${files.length} 份已入库 · 用时 ${seconds} 秒`;
+  uploadHideTimer = setTimeout(() => bar.classList.add("hidden"), 3000);
 
   await loadFileLibrary();
 }
@@ -672,6 +704,17 @@ async function send() {
   const answerNode = appendMessage("assistant", "", []);
   const answerText = answerNode.querySelector(".msg-text");
   answerText.classList.add("cursor");
+
+  // The longest silence in the app: nothing comes back until the model has read
+  // the drawings and started answering. Count it out loud so the wait does not
+  // look like a stall; the first token replaces this line.
+  const waitLabel = fileIds.length ? "正在读取图纸" : "正在生成回答";
+  const waitedFrom = Date.now();
+  const waitTicker = setInterval(() => {
+    const seconds = Math.floor((Date.now() - waitedFrom) / 1000);
+    answerText.textContent = `${waitLabel} · 已等待 ${seconds} 秒`;
+  }, 500);
+  const stopWait = () => clearInterval(waitTicker);
 
   try {
     const response = await fetch("/api/chat", {
@@ -714,6 +757,7 @@ async function send() {
           rememberLastConversation(state.conversationId);
           $("chat-title").textContent = event.title;
         } else if (event.type === "delta") {
+          stopWait();
           accumulated += event.text;
           answerText.innerHTML = renderMarkdown(accumulated);
           scrollToBottom();
@@ -723,6 +767,7 @@ async function send() {
           notice.textContent = event.text;
           answerNode.querySelector(".msg-body").prepend(notice);
         } else if (event.type === "error") {
+          stopWait();
           hadError = true;
           answerText.classList.remove("cursor");
           answerText.innerHTML = `<span style="color:var(--danger)">${escapeHtml(event.text)}</span>`;
@@ -741,6 +786,7 @@ async function send() {
     answerText.classList.remove("cursor");
     answerText.innerHTML = `<span style="color:var(--danger)">请求失败：${escapeHtml(error.message)}</span>`;
   } finally {
+    stopWait();
     setStreaming(false);
   }
 }
@@ -1108,6 +1154,58 @@ async function cachedExtraction(fileIds) {
 }
 
 /**
+ * Progress for the extraction call.
+ *
+ * The model answers in one piece, so there is no real percentage to report --
+ * the honest number is how long the wait has actually been. The bar closes in on
+ * 95% and parks there, and the caption counts real seconds; it only reaches 100%
+ * once the answer is in hand. A bar that lies about being nearly finished is
+ * worse than none, which is why it never creeps past that mark on its own.
+ */
+const readingProgress = {
+  tick: null,
+  hide: null,
+  startedAt: 0,
+
+  start(label) {
+    this.stop();
+    this.startedAt = Date.now();
+    $("panel-progress").classList.remove("hidden");
+    $("panel-progress-fill").style.width = "3%";
+    $("panel-progress-text").textContent = label;
+    this.tick = setInterval(() => this.paint(label), 200);
+  },
+
+  paint(label) {
+    const seconds = (Date.now() - this.startedAt) / 1000;
+    const percent = Math.min(95, 100 * (1 - Math.exp(-seconds / 12)));
+    $("panel-progress-fill").style.width = `${percent.toFixed(1)}%`;
+    $("panel-progress-text").textContent = `${label} · 已等待 ${Math.floor(seconds)} 秒`;
+  },
+
+  /** Finished successfully: fill up, say how long it took, then get out of the way. */
+  done(note) {
+    const seconds = Math.max(1, Math.round((Date.now() - this.startedAt) / 1000));
+    this.stop();
+    $("panel-progress-fill").style.width = "100%";
+    $("panel-progress-text").textContent = `${note} · 用时 ${seconds} 秒`;
+    this.hide = setTimeout(() => $("panel-progress").classList.add("hidden"), 2500);
+  },
+
+  stop() {
+    clearInterval(this.tick);
+    clearTimeout(this.hide);
+    this.tick = null;
+    this.hide = null;
+  },
+
+  hideNow() {
+    this.stop();
+    $("panel-progress").classList.add("hidden");
+  },
+};
+
+/**
  * Show the data for these files.
  *
  * Checks the stored copy first: the same drawings rarely need reading twice,
@@ -1124,7 +1222,8 @@ async function extractFor(fileIds, { force = false } = {}) {
   $("panel-tbody").replaceChildren();
   $("panel-notices").classList.add("hidden");
   $("panel-reload").classList.add("hidden");
-  $("panel-count").textContent = "正在读取…";
+  // The progress caption carries the wait, so this stays out of the way.
+  $("panel-count").textContent = "";
   setPanelVisible(true);
 
   showPanelImage(fileIds);
@@ -1138,13 +1237,18 @@ async function extractFor(fileIds, { force = false } = {}) {
       }
     }
 
+    // Only now is there a wait worth showing: the cache lookup above is quick,
+    // and this call is the one that takes tens of seconds.
+    readingProgress.start("模型正在读取图纸");
     const data = await api("/api/extract", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ file_ids: fileIds }),
     });
+    readingProgress.done("读取完成");
     applyExtraction({ ...data, file_ids: fileIds });
   } catch (error) {
+    readingProgress.hideNow();
     $("panel-count").textContent = "";
     const box = $("panel-notices");
     box.textContent = `提取失败：${error.message}`;
