@@ -99,8 +99,17 @@ function renderFileLibrary() {
       deleteFile(item.file_id);
     };
 
+    row.setAttribute("role", "button");
+    row.tabIndex = 0;
     row.append(thumb, meta, extract, del);
     row.onclick = () => toggleFileSelection(item.file_id);
+    // Space and Enter do what a click does, so picking a file is not a mouse-only
+    // gesture. The buttons inside stop propagation, so they stay independent.
+    row.onkeydown = (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleFileSelection(item.file_id);
+    };
     box.append(row);
   }
 }
@@ -387,10 +396,14 @@ async function loadConversations() {
   for (const conv of list) {
     const item = document.createElement("div");
     item.className = "conv-item" + (conv.id === state.conversationId ? " active" : "");
+    // The whole row opens the conversation, and it is reachable from the
+    // keyboard: a thing you can click should be a thing you can focus.
+    item.setAttribute("role", "button");
+    item.tabIndex = 0;
+    item.title = conv.title;
 
     const label = document.createElement("span");
     label.textContent = conv.title;
-    label.onclick = () => openConversation(conv.id);
 
     const del = document.createElement("button");
     del.type = "button";
@@ -413,6 +426,13 @@ async function loadConversations() {
       } catch (error) {
         alert(`删除失败：${error.message}`);
       }
+    };
+
+    item.onclick = () => openConversation(conv.id);
+    item.onkeydown = (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openConversation(conv.id);
     };
 
     item.append(label, del);
