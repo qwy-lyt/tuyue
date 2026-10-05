@@ -214,6 +214,10 @@ async function openSettings() {
     $("settings-error").classList.remove("hidden");
   }
 
+  // Appearance lives in this browser rather than on the account, so it is read
+  // from what theme.js stored instead of from the settings endpoint.
+  $("settings-theme").value = window.appTheme ? window.appTheme.choice() : "system";
+
   $("settings-overlay").classList.remove("hidden");
   $("settings-key").focus();
 }
@@ -324,5 +328,10 @@ $("settings-model-select").addEventListener("change", updateVisionWarning);
 $("settings-save").onclick = saveSettings;
 $("settings-verify").onclick = verifySettings;
 $("settings-cancel").onclick = () => $("settings-overlay").classList.add("hidden");
+
+/* Appearance takes effect the moment it is picked -- there is nothing to save. */
+$("settings-theme").addEventListener("change", () => {
+  window.appTheme.set($("settings-theme").value);
+});
 
 bootstrap();

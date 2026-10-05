@@ -1,4 +1,9 @@
+/* Dark is what the app ships with; [data-theme="light"] swaps the whole palette.
+   theme.js puts that attribute on <html> from <head>, before anything paints, so
+   a light-theme visitor never sees a flash of dark. */
 :root {
+  color-scheme: dark;
+
   /* Surfaces, darkest to lightest. The step between them is what gives the
      layout depth without any shadows doing the work. */
   --bg: #0d0f14;
@@ -7,8 +12,10 @@
   --panel-hi: #222834;
   --line: #262b36;
   --line-soft: #1e222c;
+  --line-strong: #3a4356;
 
   --text: #e8eaf0;
+  --text-strong: #ffffff;
   --muted: #8b93a5;
   /* Small captions sat on #5b6373, which is only ~3.2:1 against the background --
      too faint to read comfortably. This is the dimmest text that still passes. */
@@ -16,8 +23,13 @@
 
   --accent: #4c8dff;
   --accent-strong: #6ea0ff;
+  --accent-hover-text: #9dbcff;
   --accent-soft: #17203a;
   --accent-line: #2c3f6b;
+  --accent-glow: rgba(76, 141, 255, .3);
+  --btn-primary-from: #6ea0ff;
+  --btn-primary-to: #4c8dff;
+  --btn-disabled-bg: #2a3550;
 
   --warn: #f0b429;
   --warn-bg: #241d0b;
@@ -25,9 +37,28 @@
   --ok: #4ade80;
   --ok-bg: #16261c;
   --ok-line: #2a4a34;
+  --ok-text: #a9e5bb;
   --danger: #ff6b6b;
   --danger-bg: #2c1a1a;
   --danger-line: #4a2a2a;
+  --danger-text: #ffb4b4;
+
+  /* Inset surfaces: code blocks, the key box, the drawing backdrop. */
+  --inset-bg: #0a0c11;
+  --thumb-bg: #0b0d12;
+  --code-chip-bg: rgba(0, 0, 0, .25);
+  --zebra: rgba(255, 255, 255, .015);
+  --sheen: rgba(255, 255, 255, .45);
+
+  --ring: rgba(76, 141, 255, .13);
+  --overlay: rgba(6, 8, 12, .72);
+  --scroll-thumb: #333b4a;
+  --scroll-thumb-hover: #414b5e;
+  --sel-bg: #2b4b8f;
+  --sel-text: #ffffff;
+  --glow-1: rgba(76, 141, 255, .17);
+  --glow-2: rgba(123, 92, 255, .11);
+  --glow-accent: rgba(76, 141, 255, .14);
 
   --radius: 10px;
   --r-sm: 8px;
@@ -37,6 +68,66 @@
   --shadow-md: 0 12px 32px rgba(0, 0, 0, .45);
   --shadow-lg: 0 24px 64px rgba(0, 0, 0, .58);
   --t: .16s ease;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f4f6f9;
+  --panel: #ffffff;
+  --panel-soft: #f2f4f7;
+  --panel-hi: #e8ecf3;
+  --line: #e1e5ec;
+  --line-soft: #eef1f5;
+  --line-strong: #c9d0db;
+
+  --text: #1b1f27;
+  --text-strong: #0b0e13;
+  --muted: #5b6472;
+  --muted-2: #6b7484;
+
+  /* Deeper than the dark theme's blue: on white, the dark theme's accent does
+     not carry enough contrast for text or for white-on-accent buttons. */
+  --accent: #2f6fe4;
+  --accent-strong: #1f5bd0;
+  --accent-hover-text: #1746a2;
+  --accent-soft: #e8f0ff;
+  --accent-line: #b9d0f7;
+  --accent-glow: rgba(47, 111, 228, .22);
+  --btn-primary-from: #3d7bec;
+  --btn-primary-to: #2f6fe4;
+  --btn-disabled-bg: #dfe4ec;
+
+  --warn: #8a5a00;
+  --warn-bg: #fff6e2;
+  --warn-line: #f0dca6;
+  --ok: #15803d;
+  --ok-bg: #eaf7ee;
+  --ok-line: #c2e4cd;
+  --ok-text: #14622f;
+  --danger: #d64545;
+  --danger-bg: #fdecec;
+  --danger-line: #f3cbcb;
+  --danger-text: #a32020;
+
+  --inset-bg: #f6f8fa;
+  --thumb-bg: #eef1f5;
+  --code-chip-bg: rgba(0, 0, 0, .07);
+  --zebra: rgba(17, 24, 39, .018);
+  --sheen: rgba(255, 255, 255, .5);
+
+  --ring: rgba(47, 111, 228, .18);
+  --overlay: rgba(23, 30, 44, .35);
+  --scroll-thumb: #c6cdd8;
+  --scroll-thumb-hover: #aeb7c5;
+  --sel-bg: #cfe1ff;
+  --sel-text: #10233f;
+  --glow-1: rgba(47, 111, 228, .12);
+  --glow-2: rgba(123, 92, 255, .08);
+  --glow-accent: rgba(47, 111, 228, .10);
+
+  --shadow-md: 0 10px 26px rgba(23, 30, 44, .10);
+  --shadow-lg: 0 20px 50px rgba(23, 30, 44, .16);
 }
 
 * { box-sizing: border-box; }
@@ -51,27 +142,28 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
-::selection { background: #2b4b8f; color: #fff; }
+::selection { background: var(--sel-bg); color: var(--sel-text); }
 
 .hidden { display: none !important; }
 
 /* ---------- scrollbars ---------- */
 
-/* The default Windows bars are light grey slabs that fight the dark surfaces.
-   The transparent border plus content-box clipping makes a slimmer thumb. */
+/* The default Windows bars are light grey slabs that fight the dark surfaces;
+   in light mode they are the same shape in a lighter grey. The transparent
+   border plus content-box clipping makes a slimmer thumb. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #333b4a transparent;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
 ::-webkit-scrollbar { width: 11px; height: 11px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #333b4a;
+  background: var(--scroll-thumb);
   border: 3px solid transparent;
   background-clip: content-box;
   border-radius: 99px;
 }
-::-webkit-scrollbar-thumb:hover { background: #414b5e; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: content-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
 
 /* ---------- focus ---------- */
@@ -126,7 +218,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   background: linear-gradient(135deg, var(--accent), #7b5cff);
   display: grid; place-items: center;
   font-weight: 700; font-size: 13px; color: #fff;
-  box-shadow: 0 4px 14px rgba(76, 141, 255, .28), inset 0 1px 0 rgba(255, 255, 255, .25);
+  box-shadow: 0 4px 14px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, .25);
 }
 .brand small { display: block; color: var(--muted-2); font-size: 11px; }
 
@@ -183,7 +275,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .conv-item:hover .del,
 .library-item:hover .del { opacity: .8; }
 .conv-item .del:hover,
-.library-item .del:hover { opacity: 1; color: var(--danger); background: #2c1a1a; }
+.library-item .del:hover { opacity: 1; color: var(--danger); background: var(--danger-bg); }
 
 .status-box {
   font-size: 11px; color: var(--muted-2);
@@ -229,7 +321,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   content: "";
   position: absolute; left: 50%; top: -80px; transform: translateX(-50%);
   width: 460px; height: 300px; pointer-events: none;
-  background: radial-gradient(closest-side, rgba(76, 141, 255, .14), transparent 72%);
+  background: radial-gradient(closest-side, var(--glow-accent), transparent 72%);
 }
 .empty-state h2 {
   position: relative;
@@ -273,11 +365,11 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .msg-text { white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.72; }
 .msg-text p { margin: 0 0 10px; }
 .msg-text p:last-child { margin-bottom: 0; }
-.msg-text strong { color: #fff; }
-.msg-text h3 { margin: 15px 0 8px; font-size: 14.5px; font-weight: 600; color: #fff; }
+.msg-text strong { color: var(--text-strong); }
+.msg-text h3 { margin: 15px 0 8px; font-size: 14.5px; font-weight: 600; color: var(--text-strong); }
 .msg-text h3:first-child { margin-top: 0; }
 .msg-text pre {
-  background: #0a0c11; border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--inset-bg); border: 1px solid var(--line); border-radius: var(--r-sm);
   padding: 12px 14px; overflow-x: auto; font-size: 12.5px; line-height: 1.6;
 }
 .msg-text code { font-family: Consolas, "Cascadia Mono", ui-monospace, monospace; font-size: 12.5px; }
@@ -295,7 +387,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   border-radius: var(--r-sm); padding: 6px 10px; font-size: 12px;
 }
 .msg.user .file-chip { background: var(--panel-soft); }
-.file-chip img { width: 34px; height: 34px; object-fit: cover; border-radius: 6px; background: #000; }
+.file-chip img { width: 34px; height: 34px; object-fit: cover; border-radius: 6px; background: var(--thumb-bg); }
 
 .msg-warnings {
   margin-top: 8px; font-size: 12px; color: var(--warn);
@@ -327,7 +419,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 /* The whole box lights up on focus, so the ring is not doubled on the textarea. */
 .drop-zone:focus-within {
   border-color: var(--accent-line);
-  box-shadow: 0 0 0 3px rgba(76, 141, 255, .12);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 .drop-zone.dragging { border-color: var(--accent); background: var(--accent-soft); }
 
@@ -348,15 +440,15 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 
 .btn-send {
   border: 0; border-radius: var(--r-md); padding: 9px 18px;
-  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  background: linear-gradient(180deg, var(--btn-primary-from), var(--btn-primary-to));
   color: #fff; font-size: 13px; font-weight: 500; cursor: pointer;
-  box-shadow: 0 4px 14px rgba(76, 141, 255, .3);
+  box-shadow: 0 4px 14px var(--accent-glow);
   transition: filter var(--t), box-shadow var(--t), transform var(--t);
 }
 .btn-send:hover { filter: brightness(1.08); }
 .btn-send:active { transform: translateY(1px); }
 .btn-send:disabled {
-  background: #2a3550; color: var(--muted); cursor: not-allowed;
+  background: var(--btn-disabled-bg); color: var(--muted); cursor: not-allowed;
   box-shadow: none;
 }
 
@@ -366,14 +458,14 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   background: var(--warn-bg); border-bottom: 1px solid var(--warn-line); color: var(--warn);
   padding: 10px 20px; font-size: 13px; text-align: center;
 }
-.banner code { background: #00000040; padding: 1px 5px; border-radius: 4px; }
+.banner code { background: var(--code-chip-bg); padding: 1px 5px; border-radius: 4px; }
 
 /* ---------- confirm dialog ---------- */
 
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(6, 8, 12, .72);
+  background: var(--overlay);
   backdrop-filter: blur(3px);
   display: grid;
   place-items: center;
@@ -399,7 +491,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   word-break: break-word;
 }
 .dialog a { color: var(--accent-strong); text-decoration: none; border-bottom: 1px solid var(--accent-line); }
-.dialog a:hover { color: #9dbcff; }
+.dialog a:hover { color: var(--accent-hover-text); }
 /* A hairline above the actions, so the buttons do not float in the copy. */
 .dialog-actions {
   display: flex; justify-content: flex-end; gap: 8px;
@@ -418,7 +510,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   cursor: pointer;
   transition: background var(--t), border-color var(--t);
 }
-.btn-ghost:hover { border-color: #3a4356; background: var(--panel-soft); }
+.btn-ghost:hover { border-color: var(--line-strong); background: var(--panel-soft); }
 
 .btn-danger {
   background: #cf3f3f;
@@ -437,7 +529,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 /* ---------- buttons: sizes and variants ---------- */
 
 .btn-primary {
-  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  background: linear-gradient(180deg, var(--btn-primary-from), var(--btn-primary-to));
   border: 0;
   color: #fff;
   border-radius: var(--r-sm);
@@ -446,13 +538,13 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(76, 141, 255, .28);
+  box-shadow: 0 4px 14px var(--accent-glow);
   transition: filter var(--t), transform var(--t), box-shadow var(--t);
 }
 .btn-primary:hover { filter: brightness(1.08); }
 .btn-primary:active { transform: translateY(1px); }
 .btn-primary:disabled {
-  background: #2a3550; color: var(--muted); cursor: not-allowed; box-shadow: none;
+  background: var(--btn-disabled-bg); color: var(--muted); cursor: not-allowed; box-shadow: none;
 }
 
 .btn-block { width: 100%; padding: 11px; font-size: 14px; }
@@ -469,8 +561,8 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   display: grid;
   place-items: center;
   background:
-    radial-gradient(circle at 50% 20%, rgba(76, 141, 255, .17) 0%, transparent 55%),
-    radial-gradient(circle at 84% 86%, rgba(123, 92, 255, .11) 0%, transparent 50%),
+    radial-gradient(circle at 50% 20%, var(--glow-1) 0%, transparent 55%),
+    radial-gradient(circle at 84% 86%, var(--glow-2) 0%, transparent 50%),
     var(--bg);
   padding: 24px;
   z-index: 100;
@@ -507,8 +599,8 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   margin-bottom: 14px;
   word-break: break-word;
 }
-.auth-error { color: #ffb4b4; background: var(--danger-bg); border: 1px solid var(--danger-line); }
-.auth-notice { color: #a9e5bb; background: var(--ok-bg); border: 1px solid var(--ok-line); }
+.auth-error { color: var(--danger-text); background: var(--danger-bg); border: 1px solid var(--danger-line); }
+.auth-notice { color: var(--ok-text); background: var(--ok-bg); border: 1px solid var(--ok-line); }
 
 .auth-switch {
   display: flex;
@@ -523,7 +615,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   border-bottom: 1px solid transparent;
   transition: border-color var(--t), color var(--t);
 }
-.auth-switch a:hover { border-bottom-color: var(--accent-line); color: #9dbcff; }
+.auth-switch a:hover { border-bottom-color: var(--accent-line); color: var(--accent-hover-text); }
 
 /* ---------- form fields ---------- */
 
@@ -547,13 +639,13 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   outline: none;
   transition: border-color var(--t), box-shadow var(--t), background var(--t);
 }
-.field input:hover, .field select:hover { border-color: #333b4a; }
+.field input:hover, .field select:hover { border-color: var(--line-strong); }
 /* The ring lives on box-shadow; the global :focus-visible outline is turned off
    below so a focused field is not ringed twice. */
 .field input:focus, .field select:focus {
   border-color: var(--accent);
   background: var(--panel);
-  box-shadow: 0 0 0 3px rgba(76, 141, 255, .13);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 .field input:focus-visible, .field select:focus-visible { outline: none; }
 .field select { cursor: pointer; }
@@ -562,7 +654,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 
 .secret-box {
   display: block;
-  background: #0a0c11;
+  background: var(--inset-bg);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   padding: 10px 12px;
@@ -588,6 +680,13 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   border-left: 2px solid var(--line);
   padding-left: 10px;
   margin: 0 0 16px;
+}
+
+/* Appearance sits apart from the account fields: one is stored on the server,
+   the other only in this browser. */
+.theme-field {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 15px;
 }
 
 /* ---------- header actions ---------- */
@@ -642,7 +741,7 @@ body.tight-header .main-header h1 { max-width: 92px; overflow: hidden; text-over
 }
 .admin-toolbar input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(76, 141, 255, .13);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 .admin-toolbar input:focus-visible { outline: none; }
 .checkbox { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
@@ -721,7 +820,7 @@ body.tight-header .main-header h1 { max-width: 92px; overflow: hidden; text-over
   max-height: 45%;
   display: flex; flex-direction: column;
   min-height: 120px;
-  background: #0a0c11;
+  background: var(--inset-bg);
   border-bottom: 1px solid var(--line);
 }
 #panel-image {
@@ -758,7 +857,7 @@ body.tight-header .main-header h1 { max-width: 92px; overflow: hidden; text-over
 .panel-filter::placeholder { color: var(--muted-2); }
 .panel-filter:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(76, 141, 255, .13);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 .panel-filter:focus-visible { outline: none; }
 .panel-count { font-size: 12px; color: var(--muted-2); white-space: nowrap; }
@@ -795,11 +894,11 @@ body.tight-header .main-header h1 { max-width: 92px; overflow: hidden; text-over
   vertical-align: top;
 }
 /* Lanes for the eye to follow across seven columns. */
-.panel-table tbody tr:nth-child(even) td { background: rgba(255, 255, 255, .015); }
+.panel-table tbody tr:nth-child(even) td { background: var(--zebra); }
 .panel-table tbody tr:hover td { background: var(--panel-hi); }
 .panel-table tbody tr:last-child td { border-bottom: 0; }
 .panel-table td.numeric {
-  text-align: right; font-variant-numeric: tabular-nums; color: #fff;
+  text-align: right; font-variant-numeric: tabular-nums; color: var(--text-strong);
   white-space: nowrap;
 }
 .panel-table tr.row-dimension td:first-child { color: var(--accent-strong); }
@@ -856,7 +955,7 @@ body.tight-header .main-header h1 { max-width: 92px; overflow: hidden; text-over
   flex: 0 0 34px;
   width: 34px; height: 34px;
   border-radius: 6px;
-  background: #0b0d12;
+  background: var(--thumb-bg);
   border: 1px solid var(--line-soft);
   display: grid; place-items: center;
   overflow: hidden;
@@ -916,7 +1015,7 @@ body.tight-header .main-header h1 { max-width: 92px; overflow: hidden; text-over
   background-image: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, .45) 50%,
+    var(--sheen) 50%,
     rgba(255, 255, 255, 0) 100%
   );
   background-repeat: no-repeat;
@@ -965,7 +1064,7 @@ body.tight-header .main-header h1 { max-width: 92px; overflow: hidden; text-over
 }
 .chip-remove:hover { color: var(--danger); }
 
-.chip-ok { border-color: #2a4a34; color: #a9e5bb; }
+.chip-ok { border-color: var(--ok-line); color: var(--ok-text); }
 
 /* ---------- panel header actions ---------- */
 

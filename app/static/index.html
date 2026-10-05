@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>图阅</title>
+<!-- Runs before the page paints: decides light or dark and puts it on <html>. -->
+<script src="/static/theme.js"></script>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -224,6 +226,16 @@
 
     <p id="settings-vision-warning" class="auth-error hidden"></p>
     <p id="settings-key-link" class="fine-print"></p>
+
+    <!-- Appearance is per browser, not per account, so it saves on the spot. -->
+    <label class="field theme-field">
+      <span>外观<span class="hint">只影响这台设备</span></span>
+      <select id="settings-theme">
+        <option value="system">跟随系统</option>
+        <option value="light">浅色</option>
+        <option value="dark">深色</option>
+      </select>
+    </label>
 
     <p class="fine-print">
       你的 Key 会加密后存在服务器上。服务端为了调用模型必须能解密它，所以这防的是备份泄露，
