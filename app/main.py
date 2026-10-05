@@ -370,7 +370,10 @@ async def upload(
 @app.get("/api/files")
 def list_files(user: accounts.User = Depends(current_user)) -> list[dict]:
     """The account's file library: everything uploaded, newest first."""
-    return [store.file_summary(record) for record in store.list_file_records(user.id)]
+    return [
+        store.file_summary(record, has_reading=store.reading_exists(user.id, record.file_id))
+        for record in store.list_file_records(user.id)
+    ]
 
 
 @app.get("/api/files/{file_id}")

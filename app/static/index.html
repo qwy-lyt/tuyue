@@ -84,7 +84,11 @@
 
       <button id="new-chat" class="btn-new">＋ 新对话</button>
 
-      <div class="side-title">我的文件<span id="file-count" class="side-count"></span></div>
+      <div class="side-title">
+        我的文件<span id="file-count" class="side-count"></span>
+        <button id="open-library" class="side-link"
+                title="打开文件库：可搜索、排序、批量操作">全部 ›</button>
+      </div>
       <nav id="file-library" class="file-library"></nav>
 
       <div class="side-title">历史记录</div>
@@ -309,6 +313,46 @@
     <div class="dialog-actions">
       <button id="confirm-cancel" class="btn-ghost">取消</button>
       <button id="confirm-ok" class="btn-danger">删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------------ -->
+<!-- file library: the sidebar keeps a shortcut, this holds the whole set -->
+<!-- ------------------------------------------------------------------ -->
+<div id="library-overlay" class="overlay hidden">
+  <div class="dialog dialog-xwide" role="dialog" aria-modal="true" aria-labelledby="library-title">
+    <h3 id="library-title">我的文件</h3>
+
+    <div class="admin-toolbar">
+      <input id="library-search" placeholder="搜索文件名…" autocomplete="off">
+      <select id="library-sort" title="排序方式">
+        <option value="time">最新上传在前</option>
+        <option value="name">按文件名排序</option>
+      </select>
+      <button id="library-upload" class="btn-primary btn-small">上传图纸</button>
+      <span id="library-summary" class="panel-count"></span>
+    </div>
+
+    <div class="table-wrap library-wrap">
+      <table class="admin-table library-table">
+        <thead>
+          <tr>
+            <th class="col-pick"></th>
+            <th>文件</th>
+            <th>内容</th>
+            <th>上传时间</th>
+            <th>数据</th>
+            <th class="col-actions">操作</th>
+          </tr>
+        </thead>
+        <tbody id="library-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="dialog-actions">
+      <button id="library-clear" class="btn-ghost">取消选择</button>
+      <button id="library-close" class="btn-primary">完成</button>
     </div>
   </div>
 </div>

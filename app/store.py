@@ -205,8 +205,13 @@ def list_file_records(user_id: str) -> list[FileRecord]:
     return sorted(records, key=lambda item: item.uploaded_at, reverse=True)
 
 
-def file_summary(record: FileRecord) -> dict:
-    """A listing row: no extracted text, just enough to draw the entry."""
+def file_summary(record: FileRecord, *, has_reading: bool = False) -> dict:
+    """A listing row: no extracted text, just enough to draw the entry.
+
+    `has_reading` says whether this one file already has a stored reading of its
+    own. The library shows it so a person can tell which drawings are free to
+    reopen and which ones would spend a model call.
+    """
     first_image = ""
     for path in record.image_paths:
         if path.is_file():
@@ -222,7 +227,13 @@ def file_summary(record: FileRecord) -> dict:
         "image_count": len(record.images),
         "thumbnail": first_image,
         "warnings": record.warnings,
+        "has_reading": has_reading,
     }
+
+
+def reading_exists(user_id: str, file_id: str) -> bool:
+    """Whether this file has been read on its own, with no other file in the set."""
+    return load_extraction(user_id, [file_id]) is not None
 
 
 def delete_file_record(user_id: str, file_id: str) -> FileRecord | None:

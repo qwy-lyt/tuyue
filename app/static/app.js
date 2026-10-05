@@ -31,6 +31,7 @@ async function loadFileLibrary() {
 
   renderFileLibrary();
   renderSelection();
+  renderLibrary();
 }
 
 function renderFileLibrary() {
@@ -123,12 +124,14 @@ function toggleFileSelection(fileId) {
   }
   renderFileLibrary();
   renderSelection();
+  renderLibrary();
 }
 
 function clearSelection() {
   state.selectedIds = [];
   renderFileLibrary();
   renderSelection();
+  renderLibrary();
 }
 
 /** Take a file out of the library, along with everything derived from it. */
@@ -173,6 +176,170 @@ function clearPanel() {
   $("panel-notices").classList.add("hidden");
   updateReloadButton();
   setPanelVisible(false);
+}
+
+/* ------------------------------------------------------------------ */
+/* the file library view                                               */
+/* ------------------------------------------------------------------ */
+
+/* The sidebar list is a shortcut with room for a handful of names. This is the
+   whole set: full file names, dates, whether a reading is already stored, and
+   the actions that go with each row. Both views share `state.selectedIds`, so
+   picking something in one shows up in the other. */
+const libraryView = { search: "", sort: "time" };
+
+function formatWhen(seconds) {
+  if (!seconds) return "";
+  const when = new Date(seconds * 1000);
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} `
+    + `${pad(when.getHours())}:${pad(when.getMinutes())}`;
+}
+
+function openLibrary() {
+  $("library-overlay").classList.remove("hidden");
+  renderLibrary();
+  $("library-search").focus();
+}
+
+function closeLibrary() {
+  $("library-overlay").classList.add("hidden");
+}
+
+/** The rows to draw, after the search box and the sort order have had their say. */
+function libraryRows() {
+  const needle = libraryView.search.trim().toLowerCase();
+  const rows = needle
+    ? state.library.filter((item) => item.filename.toLowerCase().includes(needle))
+    : [...state.library];
+
+  if (libraryView.sort === "name") {
+    rows.sort((a, b) => a.filename.localeCompare(b.filename, "zh"));
+  } else {
+    rows.sort((a, b) => b.uploaded_at - a.uploaded_at);
+  }
+  return rows;
+}
+
+function renderLibrary() {
+  const body = $("library-tbody");
+  if (!body) return;
+  body.replaceChildren();
+
+  const rows = libraryRows();
+  const total = state.library.length;
+  $("library-summary").textContent = rows.length === total
+    ? `共 ${total} 份`
+    : `找到 ${rows.length} / ${total} 份`;
+  $("library-clear").disabled = !state.selectedIds.length;
+
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.className = "library-none";
+    td.textContent = total
+      ? "没有匹配这个关键词的文件名。"
+      : "还没有文件。上传后会出现在这里，想聊哪个选哪个。";
+    tr.append(td);
+    body.append(tr);
+    return;
+  }
+
+  for (const item of rows) {
+    const selected = state.selectedIds.includes(item.file_id);
+    const tr = document.createElement("tr");
+    tr.className = "library-row" + (selected ? " selected" : "");
+    tr.title = selected ? "点击取消选择" : "点击选中，用它提问";
+
+    const pickCell = document.createElement("td");
+    pickCell.className = "col-pick";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = selected;
+    box.setAttribute("aria-label", `选择 ${item.filename}`);
+    // The box and the row do the same thing; stopping the click here keeps it
+    // from happening twice as the event travels up to the row.
+    box.onclick = (event) => event.stopPropagation();
+    box.onchange = () => toggleFileSelection(item.file_id);
+    pickCell.append(box);
+
+    const fileCell = document.createElement("td");
+    fileCell.className = "lib-file";
+    const thumb = document.createElement("div");
+    thumb.className = "library-thumb";
+    if (item.thumbnail) {
+      const img = document.createElement("img");
+      img.src = item.thumbnail;
+      img.alt = "";
+      thumb.append(img);
+    } else {
+      thumb.textContent = "📄";
+    }
+    const meta = document.createElement("div");
+    meta.className = "lib-meta";
+    const name = document.createElement("div");
+    name.className = "lib-name";
+    name.textContent = item.filename;
+    const kind = document.createElement("div");
+    kind.className = "library-sub";
+    kind.textContent = (item.kind || "文件").toUpperCase();
+    meta.append(name, kind);
+    fileCell.append(thumb, meta);
+
+    const infoCell = document.createElement("td");
+    const bits = [];
+    if (item.image_count) bits.push(`${item.image_count} 张图`);
+    bits.push(item.has_text ? "含文字" : "无文字层");
+    infoCell.textContent = bits.join(" · ");
+
+    const whenCell = document.createElement("td");
+    whenCell.className = "lib-when";
+    whenCell.textContent = formatWhen(item.uploaded_at);
+
+    const dataCell = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = "pill" + (item.has_reading ? " pill-ok" : "");
+    badge.textContent = item.has_reading ? "已读" : "未读";
+    badge.title = item.has_reading
+      ? "已经存下识别结果，再看不用再调用模型"
+      : "还没有读取过，点「数据」会调用一次模型";
+    dataCell.append(badge);
+
+    const actionCell = document.createElement("td");
+    actionCell.className = "col-actions";
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+
+    const read = document.createElement("button");
+    read.type = "button";
+    read.className = "btn-tiny btn-ghost";
+    read.textContent = "数据";
+    read.title = "读取这份文件的数据（会打开右侧面板）";
+    // The panel would open behind this dialog, so step out of the way first.
+    read.onclick = (event) => {
+      event.stopPropagation();
+      closeLibrary();
+      extractFor([item.file_id]);
+    };
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn-tiny btn-ghost btn-danger-text";
+    del.textContent = "删除";
+    del.title = `删除「${item.filename}」`;
+    del.onclick = (event) => {
+      event.stopPropagation();
+      deleteFile(item.file_id);
+    };
+
+    actions.append(read, del);
+    actionCell.append(actions);
+
+    tr.append(pickCell, fileCell, infoCell, whenCell, dataCell, actionCell);
+    tr.onclick = () => toggleFileSelection(item.file_id);
+    body.append(tr);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -858,6 +1025,32 @@ $("file-input").onchange = (event) => {
   uploadFiles(event.target.files);
   event.target.value = "";
 };
+
+/* ---------- file library view ---------- */
+
+$("open-library").onclick = openLibrary;
+$("library-close").onclick = closeLibrary;
+$("library-clear").onclick = clearSelection;
+// Uploading from inside the library reuses the composer's picker, so there is
+// only one upload path and one place that reports progress.
+$("library-upload").onclick = () => $("file-input").click();
+$("library-search").addEventListener("input", (event) => {
+  libraryView.search = event.target.value;
+  renderLibrary();
+});
+$("library-sort").addEventListener("change", (event) => {
+  libraryView.sort = event.target.value;
+  renderLibrary();
+});
+$("library-overlay").onclick = (event) => {
+  if (event.target === $("library-overlay")) closeLibrary();
+};
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  // A confirmation stacked on top of the library owns the key first.
+  if (!$("confirm-overlay").classList.contains("hidden")) return;
+  if (!$("library-overlay").classList.contains("hidden")) closeLibrary();
+});
 
 const dropZone = $("drop-zone");
 ["dragenter", "dragover"].forEach((name) =>

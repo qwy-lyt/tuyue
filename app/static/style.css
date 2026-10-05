@@ -994,6 +994,68 @@ body.tight-header .main-header h1 { max-width: 92px; overflow: hidden; text-over
   background: var(--accent-soft);
 }
 
+/* The way into the full library, which the 270px list cannot be. */
+.side-link {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  color: var(--muted-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--t);
+}
+.side-link:hover { color: var(--accent-strong); }
+
+/* ---------- the file library view ---------- */
+
+/* Under the confirmation dialog: deleting from here has to be able to ask. */
+#library-overlay { z-index: 45; }
+
+.library-wrap { max-height: 58vh; }
+
+.library-table td { vertical-align: middle; }
+.library-table .col-pick { width: 34px; padding-right: 0; }
+.library-table .col-pick input {
+  width: 15px; height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+}
+.library-table .col-actions { width: 1%; white-space: nowrap; }
+
+.library-row { cursor: pointer; }
+/* Beats the hover rule below, so a picked row stays picked under the cursor. */
+.library-table .library-row.selected td { background: var(--accent-soft); }
+.library-table .library-row.selected td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+
+.lib-file { display: flex; align-items: center; gap: 9px; }
+.lib-meta { min-width: 0; }
+.lib-name { color: var(--text); word-break: break-all; }
+.library-row.selected .lib-name { color: var(--accent-strong); }
+.lib-when {
+  color: var(--muted-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.library-none {
+  color: var(--muted-2);
+  text-align: center;
+  padding: 26px 0 !important;
+}
+
+.pill {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 11px;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+.pill-ok { color: var(--ok-text); border-color: var(--ok-line); background: var(--ok-bg); }
+
 /* ---------- progress ---------- */
 
 /* Shown while something takes long enough that a person would otherwise be
