@@ -16,14 +16,14 @@ data/
 backups/
 *.zip
 
-# 本地个人词表：里面是人名、公司名、机器名，只用于发布前自检
+# 本机运维笔记：记录这台机器上这个实例的具体情况（地址、路径、账号名）
+# 公开仓库里不需要，也不该有
+运维笔记.md
+
+# 发布前的本地自检工具：用到个人词表和本机路径，只在自己机器上跑
 scripts/_personal_terms.txt
-scripts/_net_check.py
-scripts/_push_routes.py
-scripts/_find_git_mirror.py
-scripts/_find_git_version.py
-scripts/_install_git.py
 scripts/_personal_scan.py
+scripts/_privacy_audit.py
 
 # ---------------------------------------------------------------------------
 # 环境与构建产物
