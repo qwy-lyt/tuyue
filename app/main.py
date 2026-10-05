@@ -54,8 +54,10 @@ async def harden_responses(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "same-origin"
 
-    if request.url.path.startswith("/static"):
+    if request.url.path.startswith("/static") or request.url.path in ("/", "/index.html"):
         # Revalidate instead of serving stale copies; costs a 304 when unchanged.
+        # The entry point is included on purpose: the HTML is what names the
+        # versioned assets, so a cached copy hands the browser yesterday's UI.
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -377,6 +379,26 @@ def file_record(file_id: str, user: accounts.User = Depends(current_user)) -> di
     if record is None:
         raise HTTPException(404, "文件不存在")
     return asdict(record)
+
+
+@app.delete("/api/files/{file_id}")
+def remove_file(
+    file_id: str, request: Request, user: accounts.User = Depends(current_user)
+) -> dict:
+    """Take one file out of the library.
+
+    Conversations that quoted it keep their text; the attachment simply resolves
+    to nothing, which the readers already tolerate. Only this account's own file
+    can be reached -- the id is looked up inside the caller's directory.
+    """
+    check_origin(request)
+    removed = store.delete_file_record(user.id, file_id)
+    if removed is None:
+        raise HTTPException(404, "文件不存在")
+    accounts.audit(
+        "delete_file", actor=user.username, detail=removed.filename, ip=client_ip(request)
+    )
+    return {"ok": True, "filename": removed.filename}
 
 
 @app.get("/api/files/{file_id}/images/{index}")

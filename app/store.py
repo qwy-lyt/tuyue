@@ -225,6 +225,42 @@ def file_summary(record: FileRecord) -> dict:
     }
 
 
+def delete_file_record(user_id: str, file_id: str) -> FileRecord | None:
+    """Drop one uploaded file, returning what it was, or None if nothing was there.
+
+    Three things go: the uploaded bytes, the parse cache behind the record, and
+    every stored extraction that had this file in its set. That last part is not
+    optional housekeeping -- an extraction is keyed on the whole set, so once one
+    member is gone the saved table describes a set that can never be asked for
+    again, and would sit on disk forever.
+
+    An id that could not name a stored file is answered with None rather than
+    raised: the caller turns that into a 404, which is also what a malformed id
+    deserves.
+    """
+    try:
+        file_id = _checked(file_id)
+    except InvalidId:
+        return None
+
+    record = load_file_record(user_id, file_id)
+    if record is None:
+        return None
+
+    for path in (uploads_dir(user_id) / file_id, file_dir(user_id, file_id)):
+        shutil.rmtree(path, ignore_errors=True)
+
+    for path in extractions_dir(user_id).glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if file_id in (data.get("file_ids") or []):
+            path.unlink(missing_ok=True)
+
+    return record
+
+
 # --------------------------------------------------------------------------
 # conversations
 # --------------------------------------------------------------------------

@@ -81,7 +81,8 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .conv-item.active { background: var(--panel-soft); color: var(--text); }
 .conv-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 /* Always visible, but kept quiet so it doesn't compete with the title. */
-.conv-item .del {
+.conv-item .del,
+.library-item .del {
   flex: 0 0 auto;
   opacity: .4;
   color: var(--muted);
@@ -94,8 +95,10 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   border-radius: 5px;
   cursor: pointer;
 }
-.conv-item:hover .del { opacity: .8; }
-.conv-item .del:hover { opacity: 1; color: var(--danger); background: #2c1a1a; }
+.conv-item:hover .del,
+.library-item:hover .del { opacity: .8; }
+.conv-item .del:hover,
+.library-item .del:hover { opacity: 1; color: var(--danger); background: #2c1a1a; }
 
 .status-box {
   font-size: 11px; color: var(--muted);

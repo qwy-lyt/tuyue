@@ -50,7 +50,8 @@ function renderFileLibrary() {
     const selected = state.selectedIds.includes(item.file_id);
     const row = document.createElement("div");
     row.className = "library-item" + (selected ? " selected" : "");
-    row.title = selected ? "点击取消选择" : "点击选中，然后用它提问";
+    // The name can be ellipsised in a 270px sidebar, so the tooltip repeats it.
+    row.title = `${item.filename}\n${selected ? "点击取消选择" : "点击选中，然后用它提问"}`;
 
     const thumb = document.createElement("div");
     thumb.className = "library-thumb";
@@ -87,7 +88,18 @@ function renderFileLibrary() {
       extractFor([item.file_id]);
     };
 
-    row.append(thumb, meta, extract);
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "del";
+    del.textContent = "×";
+    del.title = `删除「${item.filename}」`;
+    del.setAttribute("aria-label", del.title);
+    del.onclick = (event) => {
+      event.stopPropagation();
+      deleteFile(item.file_id);
+    };
+
+    row.append(thumb, meta, extract, del);
     row.onclick = () => toggleFileSelection(item.file_id);
     box.append(row);
   }
@@ -108,6 +120,50 @@ function clearSelection() {
   state.selectedIds = [];
   renderFileLibrary();
   renderSelection();
+}
+
+/** Take a file out of the library, along with everything derived from it. */
+async function deleteFile(fileId) {
+  const item = libraryEntry(fileId);
+  if (!item) return;
+
+  const confirmed = await confirmDialog({
+    title: "删除文件",
+    text:
+      `「${item.filename}」的原件、解析缓存和已读出的数据会一并删除，无法恢复。` +
+      "已经聊过的内容不受影响。",
+    confirmLabel: "删除",
+  });
+  if (!confirmed) return;
+
+  try {
+    await api(`/api/files/${fileId}`, { method: "DELETE" });
+  } catch (error) {
+    alert(`删除失败：${error.message}`);
+    return;
+  }
+
+  state.selectedIds = state.selectedIds.filter((id) => id !== fileId);
+  if (state.fileCache) delete state.fileCache[fileId];
+
+  // The panel was showing a set this file belonged to, and that set can never be
+  // asked for again -- better to close it than leave a table with no subject.
+  if (panel.fileIds.includes(fileId)) clearPanel();
+
+  await loadFileLibrary();
+}
+
+/** Empty the panel, for when what it described is gone. */
+function clearPanel() {
+  panel.items = [];
+  panel.fileIds = [];
+  panel.filter = "";
+  $("panel-filter").value = "";
+  $("panel-tbody").replaceChildren();
+  $("panel-count").textContent = "";
+  $("panel-notices").classList.add("hidden");
+  updateReloadButton();
+  setPanelVisible(false);
 }
 
 /* ------------------------------------------------------------------ */
