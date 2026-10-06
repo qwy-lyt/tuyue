@@ -20,6 +20,9 @@ backups/
 # 公开仓库里不需要，也不该有
 运维笔记.md
 
+# 迁移说明：写给另一台机器上的助手看，同样含本机路径与账号名
+迁移说明.md
+
 # 发布前的本地自检工具：用到个人词表和本机路径，只在自己机器上跑
 scripts/_personal_terms.txt
 scripts/_personal_scan.py
